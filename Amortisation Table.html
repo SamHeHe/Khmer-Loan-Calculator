@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>គណនាការបង់សងប្រាក់កម្ចី</title>
+  <!-- Bootstrap CSS via CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Khmer OS', Arial, sans-serif;
+    }
+    .container {
+      margin-top: 40px;
+    }
+    h1 {
+      margin-bottom: 30px;
+    }
+    .card {
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .table-responsive {
+      margin-top: 20px;
+    }
+    canvas {
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card p-4">
+      <h1 class="text-center">គណនាការបង់សងប្រាក់កម្ចី</h1>
+      <form id="loanForm">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label for="loanAmount" class="form-label">ចំនួនប្រាក់កម្ចី:</label>
+            <input type="number" class="form-control" id="loanAmount" step="0.01" required>
+          </div>
+          <div class="col-md-4">
+            <label for="interestRate" class="form-label">អត្រាការប្រាក់ប្រចាំឆ្នាំ (%):</label>
+            <input type="number" class="form-control" id="interestRate" step="0.01" required>
+          </div>
+          <div class="col-md-4">
+            <label for="loanTerm" class="form-label">រយៈពេលកម្ចី (ឆ្នាំ):</label>
+            <input type="number" class="form-control" id="loanTerm" required>
+          </div>
+          <div class="col-md-4">
+            <label for="startDate" class="form-label">កាលបរិច្ឆេទចាប់ផ្ដើម:</label>
+            <input type="date" class="form-control" id="startDate" required>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">របៀបបង្ហាញ:</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="displayMode" id="monthly" value="monthly" checked>
+              <label class="form-check-label" for="monthly">តារាងប្រចាំខែ</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="displayMode" id="yearly" value="yearly">
+              <label class="form-check-label" for="yearly">តារាងប្រចាំឆ្នាំ</label>
+            </div>
+          </div>
+        </div>
+        <div class="d-grid gap-2 mt-3">
+          <button type="submit" class="btn btn-primary">គណនា</button>
+        </div>
+      </form>
+      <div class="table-responsive">
+        <table id="amortisationTable" class="table table-bordered table-striped">
+          <thead id="tableHead">
+            <!-- Header rows will be inserted dynamically based on mode -->
+          </thead>
+          <tbody>
+            <!-- Table rows will be added here -->
+          </tbody>
+        </table>
+      </div>
+      <!-- Graph 1: Remaining Balance & Cumulative Interest -->
+      <div class="mt-4">
+        <canvas id="balanceChart"></canvas>
+      </div>
+      <!-- Graph 2: Stacked Breakdown of Principal vs Interest -->
+      <div class="mt-4">
+        <canvas id="breakdownChart"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Bootstrap Bundle with Popper (for interactive components) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script>
+    document.getElementById('loanForm').addEventListener('submit', function(e) {
+      e.preventDefault(); // ជៀសវាងការផ្ទុកទំព័រឡើងវិញ
+
+      // Validate user inputs for interest rate and loan term
+      var inputInterestRate = parseFloat(document.getElementById('interestRate').value);
+      if (inputInterestRate > 20) {
+        alert("អត្រាការប្រាក់ដែលបានបញ្ចូលខ្ពស់ពេក។ សូមពិចារណាពិភាក្សាជាមួយអ្នកជំនាញហិរញ្ញវត្ថុ។");
+        return;
+      }
+      var inputLoanTerm = parseInt(document.getElementById('loanTerm').value);
+      if (inputLoanTerm > 30) {
+        alert("រយៈពេលកម្ចីដែលបានបញ្ចូលលើសពី 30 ឆ្នាំ។ សូមពិចារណាពិភាក្សាជាមួយអ្នកជំនាញហិរញ្ញវត្ថុ។");
+        return;
+      }
+
+      // ទាញយកនិងបម្លែងតម្លៃដែលអ្នកប្រើបានបញ្ចូល
+      var loanAmount = parseFloat(document.getElementById('loanAmount').value);
+      var annualInterestRate = inputInterestRate / 100; // Convert % to fraction
+      var loanTerm = inputLoanTerm;
+      var startDateInput = document.getElementById('startDate').value;
+      var displayMode = document.querySelector('input[name="displayMode"]:checked').value;
+      
+      // គណនាតម្លៃប្រចាំខែ
+      var monthlyInterestRate = annualInterestRate / 12;
+      var numberOfPayments = loanTerm * 12;
+      var monthlyPayment;
+      
+      if (monthlyInterestRate === 0) {
+        monthlyPayment = loanAmount / numberOfPayments;
+      } else {
+        monthlyPayment = loanAmount * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, numberOfPayments) /
+                         (Math.pow(1 + monthlyInterestRate, numberOfPayments) - 1);
+      }
+      
+      // លុបលទ្ធផលចាស់ៗ
+      var tableBody = document.querySelector('#amortisationTable tbody');
+      tableBody.innerHTML = '';
+      var tableHead = document.getElementById('tableHead');
+      tableHead.innerHTML = '';
+      
+      var balance = loanAmount;
+      var paymentDate = new Date(startDateInput);
+      
+      // Initialize arrays for chart data
+      var chartLabels = [];
+      var chartBalances = [];
+      var chartCumulativeInterest = [];
+      var cumulativeInterest = 0;
+      var cumulativePrincipal = 0;
+      
+      if (displayMode === "monthly") {
+        // កំណត់ក្បាលតារាងសម្រាប់តារាងប្រចាំខែ
+        tableHead.innerHTML = '<tr><th>ល.រ</th><th>ការបង់ប្រាក់</th><th>ការប្រាក់</th><th>ប្រាក់ដើម</th><th>សមតុល្យ</th><th>កាលបរិច្ឆេទ</th></tr>';
+        
+        for (var i = 1; i <= numberOfPayments; i++) {
+          var interestPayment = balance * monthlyInterestRate;
+          var principalPayment = monthlyPayment - interestPayment;
+          
+          // Adjust the final payment to avoid negative balance
+          if (principalPayment > balance) {
+            principalPayment = balance;
+            monthlyPayment = interestPayment + principalPayment;
+          }
+          
+          balance -= principalPayment;
+          cumulativeInterest += interestPayment;
+          cumulativePrincipal += principalPayment;
+          
+          var paymentDateStr = paymentDate.toLocaleDateString('km-KH');
+          
+          // បង្កើតជួរដេកសម្រាប់ខែនេះ
+          var row = document.createElement('tr');
+          row.innerHTML = '<td>' + i + '</td>' +
+                          '<td>' + monthlyPayment.toFixed(2) + '</td>' +
+                          '<td>' + interestPayment.toFixed(2) + '</td>' +
+                          '<td>' + principalPayment.toFixed(2) + '</td>' +
+                          '<td>' + balance.toFixed(2) + '</td>' +
+                          '<td>' + paymentDateStr + '</td>';
+          tableBody.appendChild(row);
+          
+          // Save data for the chart
+          chartLabels.push(paymentDateStr);
+          chartBalances.push(parseFloat(balance.toFixed(2)));
+          chartCumulativeInterest.push(parseFloat(cumulativeInterest.toFixed(2)));
+          
+          // បន្ថែមមួយខែទៅកាលបរិច្ឆេទ
+          paymentDate.setMonth(paymentDate.getMonth() + 1);
+        }
+      } else { // yearly mode
+        // កំណត់ក្បាលតារាងសម្រាប់តារាងប្រចាំឆ្នាំ
+        tableHead.innerHTML = '<tr><th>ឆ្នាំ</th><th>ការបង់ប្រាក់សរុប</th><th>ការប្រាក់សរុប</th><th>ប្រាក់ដើមសរុប</th><th>សមតុល្យនៅសល់</th><th>កាលបរិច្ឆេទ</th></tr>';
+        var paymentCount = 0;
+        
+        for (var year = 1; year <= loanTerm; year++) {
+          var yearlyPaymentTotal = 0;
+          var yearlyInterestTotal = 0;
+          var yearlyPrincipalTotal = 0;
+          
+          // Save the starting date for the current year
+          var yearStartDate = new Date(paymentDate);
+          
+          // Process 12 months for the current year
+          for (var month = 1; month <= 12; month++) {
+            if (paymentCount >= numberOfPayments) break;
+            
+            var interestPayment = balance * monthlyInterestRate;
+            var principalPayment = monthlyPayment - interestPayment;
+            
+            if (principalPayment > balance) {
+              principalPayment = balance;
+              monthlyPayment = interestPayment + principalPayment;
+            }
+            
+            balance -= principalPayment;
+            yearlyPaymentTotal += monthlyPayment;
+            yearlyInterestTotal += interestPayment;
+            yearlyPrincipalTotal += principalPayment;
+            cumulativeInterest += interestPayment;
+            cumulativePrincipal += principalPayment;
+            paymentCount++;
+            
+            // បន្ថែមមួយខែទៅកាលបរិច្ឆេទ
+            paymentDate.setMonth(paymentDate.getMonth() + 1);
+          }
+          
+          var yearStartDateStr = yearStartDate.toLocaleDateString('km-KH');
+          
+          var row = document.createElement('tr');
+          row.innerHTML = '<td>' + year + '</td>' +
+                          '<td>' + yearlyPaymentTotal.toFixed(2) + '</td>' +
+                          '<td>' + yearlyInterestTotal.toFixed(2) + '</td>' +
+                          '<td>' + yearlyPrincipalTotal.toFixed(2) + '</td>' +
+                          '<td>' + balance.toFixed(2) + '</td>' +
+                          '<td>' + yearStartDateStr + '</td>';
+          tableBody.appendChild(row);
+          
+          chartLabels.push(yearStartDateStr);
+          chartBalances.push(parseFloat(balance.toFixed(2)));
+          chartCumulativeInterest.push(parseFloat(cumulativeInterest.toFixed(2)));
+        }
+      }
+      
+      // Graph 1: Line chart for remaining balance and cumulative interest over time
+      var ctx = document.getElementById('balanceChart').getContext('2d');
+      if (window.balanceChartInstance) {
+        window.balanceChartInstance.destroy();
+      }
+      window.balanceChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: 'សមតុល្យនៅសល់',
+            data: chartBalances,
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            fill: true,
+            tension: 0.1,
+            pointRadius: 3,
+            pointHoverRadius: 6
+          },
+          {
+            label: 'ការប្រាក់សរុបបានបង់',
+            data: chartCumulativeInterest,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            fill: true,
+            tension: 0.1,
+            pointRadius: 3,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'តម្លៃ (៛)'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'ពេលវេលា'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y;
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      // Graph 2: Stacked bar chart for overall breakdown (total principal vs total interest)
+      var totalPrincipalPaid = loanAmount - balance;
+      var totalInterestPaid = cumulativeInterest;
+      var ctx2 = document.getElementById('breakdownChart').getContext('2d');
+      if (window.breakdownChartInstance) {
+        window.breakdownChartInstance.destroy();
+      }
+      window.breakdownChartInstance = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: ['សរុប'],
+          datasets: [
+            {
+              label: 'ប្រាក់ដើមសរុប',
+              data: [totalPrincipalPaid],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            },
+            {
+              label: 'ការប្រាក់សរុប',
+              data: [totalInterestPaid],
+              backgroundColor: 'rgba(255, 159, 64, 0.8)'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              title: {
+                display: true,
+                text: 'សរុប'
+              }
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'តម្លៃ (៛)'
+              }
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
